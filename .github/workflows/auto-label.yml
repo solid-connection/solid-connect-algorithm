@@ -1,0 +1,51 @@
+name: Auto Label PR
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Add labels based on PR title
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const labels = [];
+
+            // 주차별 문제인지 확인
+            if (title.includes('[Week')) {
+              labels.push('weekly-challenge');
+            }
+
+            // 개인 문제인지 확인
+            if (title.includes('[Personal]')) {
+              labels.push('personal');
+            }
+
+            // 플랫폼별 라벨
+            if (title.includes('BOJ')) {
+              labels.push('백준');
+            }
+            if (title.includes('PGS')) {
+              labels.push('프로그래머스');
+            }
+            if (title.includes('LTC') || title.includes('LeetCode')) {
+              labels.push('리트코드');
+            }
+
+            // 라벨 추가
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                labels: labels
+              });
+            }

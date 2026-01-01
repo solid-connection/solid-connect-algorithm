@@ -1,0 +1,94 @@
+name: Create Weekly Issue
+
+on:
+  workflow_dispatch:
+    inputs:
+      week_number:
+        description: '주차 번호 (예: 01, 02, 03)'
+        required: true
+        type: string
+      start_date:
+        description: '시작 날짜 (YYYY.MM.DD)'
+        required: true
+        type: string
+      end_date:
+        description: '종료 날짜 (YYYY.MM.DD)'
+        required: true
+        type: string
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Create weekly issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const weekNumber = '${{ inputs.week_number }}';
+            const startDate = '${{ inputs.start_date }}';
+            const endDate = '${{ inputs.end_date }}';
+
+            const issueBody = `## Week ${weekNumber} (${startDate} ~ ${endDate})
+
+            이번 주 공통 문제입니다! 💪
+
+            ### 📝 문제 목록
+
+            #### 문제 1
+            - **플랫폼**: 백준 / 프로그래머스 / 리트코드
+            - **문제 번호**:
+            - **문제 이름**:
+            - **난이도**:
+            - **링크**:
+            - **분류**: (예: DP, 그리디, DFS/BFS 등)
+
+            #### 문제 2
+            - **플랫폼**:
+            - **문제 번호**:
+            - **문제 이름**:
+            - **난이도**:
+            - **링크**:
+            - **분류**:
+
+            #### 문제 3
+            - **플랫폼**:
+            - **문제 번호**:
+            - **문제 이름**:
+            - **난이도**:
+            - **링크**:
+            - **분류**:
+
+            ---
+
+            ### ✅ 진행 상황
+
+            - [ ] @gyuhyeok99
+            - [ ] @member2
+            - [ ] @member3
+
+            ---
+
+            ### 💡 참고사항
+
+            문제 풀이는 \`weekly/week${weekNumber}/\` 디렉토리에 업로드해주세요!
+
+            \`\`\`bash
+            weekly/week${weekNumber}/
+            ├── BOJ_1234_문제명/
+            │   ├── gyuhyeok99.py
+            │   └── member2.java
+            └── PGS_5678_문제명/
+                └── member3.cpp
+            \`\`\`
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Week${weekNumber}] ${startDate} ~ ${endDate} 주차 문제`,
+              body: issueBody,
+              labels: ['weekly-challenge']
+            });
