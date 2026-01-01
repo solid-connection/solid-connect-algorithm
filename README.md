@@ -83,22 +83,11 @@ git push origin main
 
 | 이름 | GitHub |
 |------|--------|
+| 강형준 | [@sukangpunch](https://github.com/sukangpunch) |
+| 박인성 | [@Hexeong](https://github.com/Hexeong) |
+| 조성혁 | [@whqtker](https://github.com/whqtker) |
+| 정재희 | [@JAEHEE25](https://github.com/JAEHEE25) |
 | 황규혁 | [@Gyuhyeok99](https://github.com/Gyuhyeok99) |
-| 멤버2 | [@member2](https://github.com/member2) |
-| 멤버3 | [@member3](https://github.com/member3) |
 
-## 진행 현황
-
-### Week 01 (2026.01.01 ~ 2026.01.07)
-
-| 문제 | gyuhyeok99 | member2 | member3 |
-|------|:----------:|:-------:|:-------:|
-| [BOJ 0000: 예시문제](링크) | ✅ | ⬜ | ⬜ |
-| [PGS 0000: 문제2](링크) | ⬜ | ⬜ | ⬜ |
-| [BOJ 0000: 문제3](링크) | ⬜ | ⬜ | ⬜ |
-
-> ✅: 완료 / ⬜: 미완료
-
----
 
 **Happy Coding!** 🚀
