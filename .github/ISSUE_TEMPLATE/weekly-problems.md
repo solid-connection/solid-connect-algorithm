@@ -40,9 +40,11 @@ assignees: ''
 
 ### ✅ 진행 상황
 
-- [ ] @gyuhyeok99
-- [ ] @member2
-- [ ] @member3
+- [ ] @sukangpunch
+- [ ] @Hexeong
+- [ ] @whqtker
+- [ ] @JAEHEE25
+- [ ] @Gyuhyeok99
 
 ---
 
