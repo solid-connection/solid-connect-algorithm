@@ -149,6 +149,7 @@ git merge main
 |------|--------|
 | 강형준 | [@sukangpunch](https://github.com/sukangpunch) |
 | 박인성 | [@Hexeong](https://github.com/Hexeong) |
+| 임수연 | [@lsy1307](https://github.com/lsy1307) |
 | 조성혁 | [@whqtker](https://github.com/whqtker) |
 | 정재희 | [@JAEHEE25](https://github.com/JAEHEE25) |
 | 황규혁 | [@Gyuhyeok99](https://github.com/Gyuhyeok99) |
