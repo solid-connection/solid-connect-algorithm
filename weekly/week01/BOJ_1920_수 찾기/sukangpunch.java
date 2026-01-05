@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 
+// 수 찾기
 public class BOJ_1920 {
 
     static int [] A;
