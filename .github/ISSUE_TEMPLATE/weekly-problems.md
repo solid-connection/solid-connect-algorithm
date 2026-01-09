@@ -42,6 +42,7 @@ assignees: ''
 - [ ] @whqtker
 - [ ] @JAEHEE25
 - [ ] @Gyuhyeok99
+- [ ] @lsy1307
 
 ---
 
