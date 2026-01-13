@@ -51,14 +51,14 @@ jobs:
 
             if (duplicate) {
               console.log(`⚠️ Issue already exists: ${duplicate.html_url}`);
-              return 'skip';
+              core.setOutput('should_create', 'false');
             } else {
               console.log(`✅ No duplicate found. Proceeding to create issue.`);
-              return 'create';
+              core.setOutput('should_create', 'true');
             }
 
       - name: Create weekly issue
-        if: steps.check.outputs.result == 'create'
+        if: steps.check.outputs.should_create == 'true'
         uses: actions/github-script@v7
         with:
           script: |
