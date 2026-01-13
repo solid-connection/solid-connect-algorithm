@@ -66,7 +66,7 @@ jobs:
               const difficulty = problemContent.match(/\*\*난이도\*\*:\s*([^\n*]+)/)?.[1]?.trim() || '';
               const link = problemContent.match(/\*\*링크\*\*:\s*([^\n*]+)/)?.[1]?.trim() || '';
 
-              if (platform && problemNum && problemName) {
+              if (platform && problemName) {
                 problems.push({
                   platform,
                   problemNum,
@@ -89,6 +89,19 @@ jobs:
               return 'ETC';
             };
 
+            // 폴더명 생성 함수 (문제번호가 없거나 -면 플랫폼_문제제목 형태)
+            const getFolderName = (problem) => {
+              const prefix = getPlatformPrefix(problem.platform);
+              const cleanName = problem.problemName.replace(/\s+/g, '');
+              const hasValidNum = problem.problemNum && problem.problemNum !== '-' && problem.problemNum.trim() !== '';
+
+              if (hasValidNum) {
+                return `${prefix}_${problem.problemNum}_${cleanName}`;
+              } else {
+                return `${prefix}_${cleanName}`;
+              }
+            };
+
             // README.md 내용 생성
             let readmeContent = `# Week ${weekNumber} (${startDate} ~ ${endDate})\n\n`;
             readmeContent += `## 📝 이번 주 문제\n\n`;
@@ -96,13 +109,14 @@ jobs:
             const folderStructure = [];
 
             problems.forEach((problem, index) => {
-              const prefix = getPlatformPrefix(problem.platform);
-              const folderName = `${prefix}_${problem.problemNum}_${problem.problemName.replace(/\s+/g, '')}`;
+              const folderName = getFolderName(problem);
               folderStructure.push(folderName);
 
               readmeContent += `### 문제 ${index + 1}: ${problem.problemName}\n`;
               readmeContent += `- **플랫폼**: ${problem.platform}\n`;
-              readmeContent += `- **문제 번호**: ${problem.problemNum}\n`;
+              if (problem.problemNum && problem.problemNum !== '-' && problem.problemNum.trim() !== '') {
+                readmeContent += `- **문제 번호**: ${problem.problemNum}\n`;
+              }
               readmeContent += `- **난이도**: ${problem.difficulty}\n`;
               readmeContent += `- **링크**: ${problem.link.startsWith('http') ? `[문제 링크](${problem.link})` : problem.link}\n`;
               readmeContent += `\n`;
@@ -126,26 +140,39 @@ jobs:
 
             // 출력 설정
             const fs = require('fs');
-            const path = `weekly/week${weekNumber}`;
+            const basePath = `weekly/week${weekNumber}`;
 
             core.setOutput('week_number', weekNumber);
-            core.setOutput('directory_path', path);
+            core.setOutput('directory_path', basePath);
             core.setOutput('readme_content', readmeContent);
 
-            // 파일 저장 (Node.js fs 사용)
-            if (!fs.existsSync(path)) {
-              fs.mkdirSync(path, { recursive: true });
+            // 주차 디렉토리 생성
+            if (!fs.existsSync(basePath)) {
+              fs.mkdirSync(basePath, { recursive: true });
             }
-            fs.writeFileSync(`${path}/README.md`, readmeContent);
 
-            console.log(`\n✅ Created ${path}/README.md`);
+            // README.md 저장
+            fs.writeFileSync(`${basePath}/README.md`, readmeContent);
+            console.log(`\n✅ Created ${basePath}/README.md`);
+
+            // 각 문제별 디렉토리 생성 및 응원 파일 생성
+            const cheerMessage = `# 이번 주도 파이팅!🔥`;
+
+            folderStructure.forEach((folder) => {
+              const problemPath = `${basePath}/${folder}`;
+              if (!fs.existsSync(problemPath)) {
+                fs.mkdirSync(problemPath, { recursive: true });
+              }
+              fs.writeFileSync(`${problemPath}/.gitkeep`, cheerMessage);
+              console.log(`✅ Created ${problemPath}/.gitkeep`);
+            });
 
       - name: Commit and push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add weekly/
-          git diff —staged —quiet || git commit -m "[Week${{ steps.create.outputs.week_number }}] 주차 디렉토리 및 README 생성
+          git diff —staged —quiet || git commit -m "[Week${{ steps.create.outputs.week_number }}] 주차별 디렉토리 및 README 생성
 
           🤖 Generated with GitHub Actions"
           git push
