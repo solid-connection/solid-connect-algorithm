@@ -1,0 +1,151 @@
+name: Create Weekly Directory
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: '이슈 번호 (예: 1, 2, 3)'
+        required: true
+        type: string
+
+jobs:
+  create-directory:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get issue info and create directory
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = parseInt('${{ inputs.issue_number }}');
+
+            // 이슈 정보 가져오기
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber
+            });
+
+            console.log(`📋 Issue title: ${issue.title}`);
+            console.log(`📝 Issue body:\n${issue.body}`);
+
+            // 제목에서 주차 정보 파싱: [Week01] 2026.01.01 ~ 2026.01.07 주차 문제
+            const titleMatch = issue.title.match(/\[Week(\d+)\]\s*(\d{4}\.\d{2}\.\d{2})\s*~\s*(\d{4}\.\d{2}\.\d{2})/);
+            if (!titleMatch) {
+              core.setFailed('이슈 제목 형식이 올바르지 않습니다. [WeekXX] YYYY.MM.DD ~ YYYY.MM.DD 형식이어야 합니다.');
+              return;
+            }
+
+            const weekNumber = titleMatch[1];
+            const startDate = titleMatch[2];
+            const endDate = titleMatch[3];
+
+            console.log(`📅 Week: ${weekNumber}, ${startDate} ~ ${endDate}`);
+
+            // 이슈 본문에서 문제 정보 파싱
+            const body = issue.body || '';
+            const problems = [];
+
+            // 문제 섹션 파싱 (#### 문제 1, #### 문제 2, ...)
+            const problemRegex = /####\s*문제\s*(\d+)[^\n]*\n([\s\S]*?)(?=####\s*문제|\n---|\n###|$)/g;
+            let match;
+
+            while ((match = problemRegex.exec(body)) !== null) {
+              const problemContent = match[2];
+
+              const platform = problemContent.match(/\*\*플랫폼\*\*:\s*([^\n*]+)/)?.[1]?.trim() || '';
+              const problemNum = problemContent.match(/\*\*문제 번호\*\*:\s*([^\n*]+)/)?.[1]?.trim() || '';
+              const problemName = problemContent.match(/\*\*문제 이름\*\*:\s*([^\n*]+)/)?.[1]?.trim() || '';
+              const difficulty = problemContent.match(/\*\*난이도\*\*:\s*([^\n*]+)/)?.[1]?.trim() || '';
+              const link = problemContent.match(/\*\*링크\*\*:\s*([^\n*]+)/)?.[1]?.trim() || '';
+
+              if (platform && problemNum && problemName) {
+                problems.push({
+                  platform,
+                  problemNum,
+                  problemName,
+                  difficulty,
+                  link
+                });
+              }
+            }
+
+            console.log(`🔍 Found ${problems.length} problems`);
+            problems.forEach((p, i) => console.log(`  ${i+1}. [${p.platform}] ${p.problemNum} - ${p.problemName}`));
+
+            // 플랫폼 약어 변환
+            const getPlatformPrefix = (platform) => {
+              const p = platform.toLowerCase();
+              if (p.includes('백준') || p.includes('boj') || p.includes('acmicpc')) return 'BOJ';
+              if (p.includes('프로그래머스') || p.includes('programmers')) return 'PGS';
+              if (p.includes('리트코드') || p.includes('leetcode')) return 'LTC';
+              return 'ETC';
+            };
+
+            // README.md 내용 생성
+            let readmeContent = `# Week ${weekNumber} (${startDate} ~ ${endDate})\n\n`;
+            readmeContent += `## 📝 이번 주 문제\n\n`;
+
+            const folderStructure = [];
+
+            problems.forEach((problem, index) => {
+              const prefix = getPlatformPrefix(problem.platform);
+              const folderName = `${prefix}_${problem.problemNum}_${problem.problemName.replace(/\s+/g, '')}`;
+              folderStructure.push(folderName);
+
+              readmeContent += `### 문제 ${index + 1}: ${problem.problemName}\n`;
+              readmeContent += `- **플랫폼**: ${problem.platform}\n`;
+              readmeContent += `- **문제 번호**: ${problem.problemNum}\n`;
+              readmeContent += `- **난이도**: ${problem.difficulty}\n`;
+              readmeContent += `- **링크**: ${problem.link.startsWith('http') ? `[문제 링크](${problem.link})` : problem.link}\n`;
+              readmeContent += `\n`;
+            });
+
+            readmeContent += `## 💡 폴더 구조\n\n`;
+            readmeContent += '```\n';
+            readmeContent += `week${weekNumber}/\n`;
+            folderStructure.forEach((folder, i) => {
+              const prefix = i === folderStructure.length - 1 ? '└──' : '├──';
+              readmeContent += `${prefix} ${folder}/\n`;
+            });
+            readmeContent += '```\n\n';
+
+            readmeContent += `## ✅ 진행 현황\n\n`;
+            readmeContent += `- [ ] @sukangpunch\n`;
+            readmeContent += `- [ ] @Hexeong\n`;
+            readmeContent += `- [ ] @whqtker\n`;
+            readmeContent += `- [ ] @JAEHEE25\n`;
+            readmeContent += `- [ ] @Gyuhyeok99\n`;
+
+            // 출력 설정
+            const fs = require('fs');
+            const path = `weekly/week${weekNumber}`;
+
+            core.setOutput('week_number', weekNumber);
+            core.setOutput('directory_path', path);
+            core.setOutput('readme_content', readmeContent);
+
+            // 파일 저장 (Node.js fs 사용)
+            if (!fs.existsSync(path)) {
+              fs.mkdirSync(path, { recursive: true });
+            }
+            fs.writeFileSync(`${path}/README.md`, readmeContent);
+
+            console.log(`\n✅ Created ${path}/README.md`);
+
+      - name: Commit and push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add weekly/
+          git diff —staged —quiet || git commit -m "[Week${{ steps.create.outputs.week_number }}] 주차 디렉토리 및 README 생성
+
+          🤖 Generated with GitHub Actions"
+          git push
