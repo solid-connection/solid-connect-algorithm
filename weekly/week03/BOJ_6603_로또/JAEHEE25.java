@@ -1,8 +1,10 @@
+package week03.BOJ_6603_로또;
+
 import java.util.*;
 import java.lang.*;
 import java.io.*;
 
-class Main {
+class BOJ6603 {
     static StringBuilder sb = new StringBuilder();
     static int k;
     static int[] numbers;
