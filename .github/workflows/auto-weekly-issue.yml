@@ -17,7 +17,7 @@ jobs:
         id: calc
         run: |
           # 현재 날짜 기준 주차 계산 (1월 1일 기준)
-          WEEK_NUM=$(date +%U)
+          WEEK_NUM=$(date +%-U)
           # 주차를 2자리로 포맷 (01, 02, ...)
           WEEK_NUM_FORMATTED=$(printf "%02d" $((WEEK_NUM + 1)))
 
