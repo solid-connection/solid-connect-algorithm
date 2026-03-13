@@ -16,14 +16,12 @@ jobs:
       - name: Calculate week number and dates
         id: calc
         run: |
-          # 현재 날짜 기준 주차 계산 (1월 1일 기준)
           WEEK_NUM=$(date +%U)
-          # 주차를 2자리로 포맷 (01, 02, ...)
-          WEEK_NUM_FORMATTED=$(printf "%02d" $((WEEK_NUM + 1)))
+          
+          WEEK_NUM_FORMATTED=$(printf "%02d" $((10#$WEEK_NUM + 1)))
 
-          # 이번 주 월요일과 일요일 계산
           START_DATE=$(date -d "monday" +%Y.%m.%d)
-          END_DATE=$(date -d "sunday" +%Y.%m.%d)
+          END_DATE=$(date -d "monday + 6 days" +%Y.%m.%d)
 
           echo "week_number=$WEEK_NUM_FORMATTED" >> $GITHUB_OUTPUT
           echo "start_date=$START_DATE" >> $GITHUB_OUTPUT
