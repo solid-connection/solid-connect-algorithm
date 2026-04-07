@@ -19,15 +19,16 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
             const title = pr.title; 
+            let body = pr.body || "";
             
-            console.log(`[분석] PR 제목: ${title}`);
+            console.log(`[분석 시작] PR 제목: ${title}`);
 
-            // 1. PR 제목에서 주차 숫자 추출
+            // 1. PR 제목에서 주차 숫자와 문제 번호 추출
             const weekMatch = title.match(/Week\s*(\d+)/i);
             const probNumMatch = title.match(/\d{4,}/); 
             
             if (!weekMatch || !probNumMatch) {
-              console.log("❌ 제목에서 주차 또는 문제번호를 추출하지 못했습니다.");
+              console.log("❌ 제목에서 주차(Week) 또는 문제번호를 추출하지 못했습니다.");
               return;
             }
 
@@ -43,53 +44,65 @@ jobs:
               per_page: 100
             });
 
-            // 3. 이슈 제목 매칭 로직 (특수문자 무시하고 'week' + '숫자'만 확인)
+            // 3. 이슈 제목 매칭 ([Week15] 등 대괄호와 공백 무시)
             const targetIssue = issues.data.find(i => {
               if (i.pull_request) return false;
-              const cleanTitle = i.title.replace(/[\s\[\]]/g, '').toLowerCase(); // 공백, [, ] 모두 제거
+              const cleanTitle = i.title.replace(/[\s\[\]]/g, '').toLowerCase(); 
               return cleanTitle.includes(`week${weekNum}`);
             });
 
             if (!targetIssue) {
               console.log(`❌ [Week${weekNum}] 이슈를 찾지 못했습니다.`);
-              // 디버깅용: 현재 레포에 있는 이슈 제목들 출력
-              console.log("현재 탐색된 이슈 목록:");
-              issues.data.slice(0, 10).forEach(i => console.log(`- ${i.title}`));
               return;
             }
             console.log(`✅ 이슈 발견: #${targetIssue.number} (${targetIssue.title})`);
 
             // 4. 이슈 본문에서 해당 문제 섹션 찾기
             const issueBody = targetIssue.body || "";
-            // '문제 1', '문제 2' 등으로 섹션 분할
-            const sections = issueBody.split(/문제\s*\d/);
+            // '#### 문제 1' 또는 '문제 1' 패턴으로 섹션 분할
+            const sections = issueBody.split(/####\s*문제\s*\d+|문제\s*\d+/);
             const targetSection = sections.find(s => s.includes(targetProbNum));
 
             if (!targetSection) {
-              console.log(`❌ 이슈 내에 ${targetProbNum}번 문제 정보가 없습니다.`);
+              console.log(`❌ 이슈 본문에서 ${targetProbNum}번 문제 정보를 찾지 못했습니다.`);
               return;
             }
 
-            // 5. 정규표현식으로 상세 정보 추출 (줄바꿈/공백 대응)
-            const getVal = (regex) => targetSection.match(regex)?.[1]?.trim() || "정보 없음";
-            
-            const platform = getVal(/플랫폼:\s*(.+)/);
-            const probName = getVal(/문제 이름:\s*(.+)/);
-            const probLink = getVal(/링크:\s*(https?:\/\/[^\s]+)/);
-            const difficulty = getVal(/난이도:\s*(.+)/);
+            // 5. 상세 정보 추출 함수 (마크다운 볼드체 ** 기호 대응)
+            const getVal = (key) => {
+              // '**키워드**: 값' 형태에서 값을 추출 (볼드 기호가 있어도 작동)
+              const regex = new RegExp(`(?:\\*\\*|)${key}(?:\\*\\*|)\\s*:\\s*([^\\r\\n]+)`, 'i');
+              const match = targetSection.match(regex);
+              return match ? match[1].trim() : "정보 없음";
+            };
 
-            // 6. PR 본문 업데이트
-            let newBody = (pr.body || "")
+            const platform = getVal("플랫폼");
+            const probName = getVal("문제 이름");
+            const difficulty = getVal("난이도");
+            // 링크는 별도로 URL 패턴으로 추출
+            const probLinkMatch = targetSection.match(/(?:https?:\/\/[^\s\r\n]+)/);
+            const probLink = probLinkMatch ? probLinkMatch[0].trim() : "정보 없음";
+
+            console.log(`[데이터 추출] 플랫폼: ${platform}, 이름: ${probName}, 난이도: ${difficulty}`);
+
+            // 6. PR 본문 업데이트 (기존 템플릿의 빈 항목을 치환)
+            // 정규표현식을 사용하여 해당 라인 전체를 교체합니다.
+            let newBody = body
               .replace(/- \*\*플랫폼\*\*:.*$/m, `- **플랫폼**: ${platform}`)
               .replace(/- \*\*문제 번호\*\*:.*$/m, `- **문제 번호**: ${targetProbNum}`)
               .replace(/- \*\*문제 이름\*\*:.*$/m, `- **문제 이름**: ${probName}`)
               .replace(/- \*\*문제 링크\*\*:.*$/m, `- **문제 링크**: ${probLink}`)
               .replace(/- \*\*난이도\*\*:.*$/m, `- **난이도**: ${difficulty}`);
 
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-              body: newBody
-            });
-            console.log("🚀 PR 본문 업데이트 성공!");
+            // 변경사항이 있을 때만 업데이트 실행
+            if (newBody !== body) {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                body: newBody
+              });
+              console.log("🚀 PR 본문이 성공적으로 업데이트되었습니다.");
+            } else {
+              console.log("⚠️ 변경할 내용이 없거나 이미 정보가 채워져 있습니다.");
+            }
