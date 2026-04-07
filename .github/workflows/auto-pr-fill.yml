@@ -2,7 +2,7 @@ name: Auto Fill PR from Weekly Issue
 
 on:
   pull_request:
-    types: [opened, edited]
+    types: [opened, edited, synchronized]
 
 jobs:
   fill-pr-info:
@@ -13,83 +13,83 @@ jobs:
       contents: read
 
     steps:
-      - name: Extract info and Update PR
+      - name: Update PR with Issue Info
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
             const title = pr.title; 
-            let body = pr.body || "";
             
-            // 1. 제목에서 주차와 문제번호 추출
+            console.log(`[분석] PR 제목: ${title}`);
+
+            // 1. PR 제목에서 주차 숫자 추출
             const weekMatch = title.match(/Week\s*(\d+)/i);
             const probNumMatch = title.match(/\d{4,}/); 
             
             if (!weekMatch || !probNumMatch) {
-              console.log("주차(Week) 또는 문제번호를 제목에서 찾을 수 없습니다.");
+              console.log("❌ 제목에서 주차 또는 문제번호를 추출하지 못했습니다.");
               return;
             }
 
-            const targetWeek = `Week ${weekMatch[1]}`;
+            const weekNum = weekMatch[1];
             const targetProbNum = probNumMatch[0];
+            console.log(`[추출 성공] 주차: ${weekNum}, 문제번호: ${targetProbNum}`);
 
-            // 2. 해당 주차 이슈 찾기
+            // 2. 이슈 검색 (상태 상관없이 최근 100개 스캔)
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              state: 'open'
+              state: 'all',
+              per_page: 100
             });
 
-            const targetIssue = issues.data.find(issue => issue.title.includes(targetWeek));
+            // 3. 이슈 제목 매칭 로직 (특수문자 무시하고 'week' + '숫자'만 확인)
+            const targetIssue = issues.data.find(i => {
+              if (i.pull_request) return false;
+              const cleanTitle = i.title.replace(/[\s\[\]]/g, '').toLowerCase(); // 공백, [, ] 모두 제거
+              return cleanTitle.includes(`week${weekNum}`);
+            });
+
             if (!targetIssue) {
-              console.log(`${targetWeek} 이슈를 찾지 못했습니다.`);
+              console.log(`❌ [Week${weekNum}] 이슈를 찾지 못했습니다.`);
+              // 디버깅용: 현재 레포에 있는 이슈 제목들 출력
+              console.log("현재 탐색된 이슈 목록:");
+              issues.data.slice(0, 10).forEach(i => console.log(`- ${i.title}`));
               return;
             }
+            console.log(`✅ 이슈 발견: #${targetIssue.number} (${targetIssue.title})`);
 
-            // 3. 이슈에서 문제 섹션 추출
-            const sections = targetIssue.body.split(/문제 \d/);
+            // 4. 이슈 본문에서 해당 문제 섹션 찾기
+            const issueBody = targetIssue.body || "";
+            // '문제 1', '문제 2' 등으로 섹션 분할
+            const sections = issueBody.split(/문제\s*\d/);
             const targetSection = sections.find(s => s.includes(targetProbNum));
 
             if (!targetSection) {
-              console.log(`이슈 내에서 ${targetProbNum}번 정보를 찾지 못했습니다.`);
+              console.log(`❌ 이슈 내에 ${targetProbNum}번 문제 정보가 없습니다.`);
               return;
             }
 
-            // 4. 정보 추출
-            const platform = targetSection.match(/플랫폼:\s*(.+)/)?.[1]?.trim() || "";
-            const probName = targetSection.match(/문제 이름:\s*(.+)/)?.[1]?.trim() || "";
-            const probLink = targetSection.match(/링크:\s*(https?:\/\/[^\s]+)/)?.[1]?.trim() || "";
-            const difficulty = targetSection.match(/난이도:\s*(.+)/)?.[1]?.trim() || "";
+            // 5. 정규표현식으로 상세 정보 추출 (줄바꿈/공백 대응)
+            const getVal = (regex) => targetSection.match(regex)?.[1]?.trim() || "정보 없음";
+            
+            const platform = getVal(/플랫폼:\s*(.+)/);
+            const probName = getVal(/문제 이름:\s*(.+)/);
+            const probLink = getVal(/링크:\s*(https?:\/\/[^\s]+)/);
+            const difficulty = getVal(/난이도:\s*(.+)/);
 
-            // 5. PR 템플릿의 빈 칸 채우기 (정규표현식 치환)
-            // 템플릿에 있는 기본 문구들을 이슈에서 가져온 실제 데이터로 교체합니다.
-            let newBody = body
-              .replace(/- \*\*플랫폼\*\*:\s*.*$/m, `- **플랫폼**: ${platform}`)
-              .replace(/- \*\*문제 번호\*\*:\s*.*$/m, `- **문제 번호**: ${targetProbNum}`)
-              .replace(/- \*\*문제 이름\*\*:\s*.*$/m, `- **문제 이름**: ${probName}`)
-              .replace(/- \*\*문제 링크\*\*:\s*.*$/m, `- **문제 링크**: ${probLink}`)
-              .replace(/- \*\*난이도\*\*:\s*.*$/m, `- **난이도**: ${difficulty}`);
+            // 6. PR 본문 업데이트
+            let newBody = (pr.body || "")
+              .replace(/- \*\*플랫폼\*\*:.*$/m, `- **플랫폼**: ${platform}`)
+              .replace(/- \*\*문제 번호\*\*:.*$/m, `- **문제 번호**: ${targetProbNum}`)
+              .replace(/- \*\*문제 이름\*\*:.*$/m, `- **문제 이름**: ${probName}`)
+              .replace(/- \*\*문제 링크\*\*:.*$/m, `- **문제 링크**: ${probLink}`)
+              .replace(/- \*\*난이도\*\*:.*$/m, `- **난이도**: ${difficulty}`);
 
-            // 6. 변경사항이 있을 때만 업데이트
-            if (newBody !== body) {
-              await github.rest.pulls.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number,
-                body: newBody
-              });
-              console.log("PR 본문이 성공적으로 업데이트되었습니다.");
-            }
-
-            // 7. 라벨 추가
-            const labels = [];
-            if (platform.includes("프로그래머스") || title.includes("PGS")) labels.push("프로그래머스");
-            if (platform.includes("백준") || title.includes("BOJ")) labels.push("백준");
-            if (labels.length > 0) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: labels
-              });
-            }
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              body: newBody
+            });
+            console.log("🚀 PR 본문 업데이트 성공!");
