@@ -18,21 +18,22 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
-            const title = pr.title; // 예: [Week15] PGS 42627: 디스크컨트롤러
+            const title = pr.title; 
+            let body = pr.body || "";
             
-            // 1. PR 제목에서 정보 추출 (정규표현식)
+            // 1. 제목에서 주차와 문제번호 추출
             const weekMatch = title.match(/Week\s*(\d+)/i);
-            const probNumMatch = title.match(/\d{4,}/); // 4자리 이상의 숫자(문제번호)
+            const probNumMatch = title.match(/\d{4,}/); 
             
             if (!weekMatch || !probNumMatch) {
-              console.log("제목 형식에서 주차(Week) 또는 문제번호를 찾을 수 없습니다.");
+              console.log("주차(Week) 또는 문제번호를 제목에서 찾을 수 없습니다.");
               return;
             }
 
-            const targetWeek = `Week ${weekMatch[1]}`; // "Week 15"
-            const targetProbNum = probNumMatch[0]; // "42627"
+            const targetWeek = `Week ${weekMatch[1]}`;
+            const targetProbNum = probNumMatch[0];
 
-            // 2. 해당 주차의 이슈 찾기 (최근 생성된 이슈 중 제목에 'Week 15'가 포함된 것)
+            // 2. 해당 주차 이슈 찾기
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -40,64 +41,55 @@ jobs:
             });
 
             const targetIssue = issues.data.find(issue => issue.title.includes(targetWeek));
-
             if (!targetIssue) {
-              console.log(`${targetWeek}에 해당하는 이슈를 찾지 못했습니다.`);
+              console.log(`${targetWeek} 이슈를 찾지 못했습니다.`);
               return;
             }
 
-            // 3. 이슈 본문 파싱 및 문제 매칭
-            const issueBody = targetIssue.body;
-            // "문제 1", "문제 2" 혹은 빈 줄 기준으로 섹션 나누기
-            const sections = issueBody.split(/문제 \d/);
+            // 3. 이슈에서 문제 섹션 추출
+            const sections = targetIssue.body.split(/문제 \d/);
             const targetSection = sections.find(s => s.includes(targetProbNum));
 
             if (!targetSection) {
-              console.log(`이슈 내에서 문제 번호 ${targetProbNum}를 찾을 수 없습니다.`);
+              console.log(`이슈 내에서 ${targetProbNum}번 정보를 찾지 못했습니다.`);
               return;
             }
 
-            // 4. 정보 추출 (정규표현식)
-            const platform = targetSection.match(/플랫폼:\s*(.+)/)?.[1]?.trim() || "정보 없음";
-            const probName = targetSection.match(/문제 이름:\s*(.+)/)?.[1]?.trim() || "정보 없음";
-            const probLink = targetSection.match(/링크:\s*(https?:\/\/[^\s]+)/)?.[1]?.trim() || "정보 없음";
-            const difficulty = targetSection.match(/난이도:\s*(.+)/)?.[1]?.trim() || "정보 없음";
+            // 4. 정보 추출
+            const platform = targetSection.match(/플랫폼:\s*(.+)/)?.[1]?.trim() || "";
+            const probName = targetSection.match(/문제 이름:\s*(.+)/)?.[1]?.trim() || "";
+            const probLink = targetSection.match(/링크:\s*(https?:\/\/[^\s]+)/)?.[1]?.trim() || "";
+            const difficulty = targetSection.match(/난이도:\s*(.+)/)?.[1]?.trim() || "";
 
-            // 5. PR 본문 업데이트 (기존 내용이 이미 업데이트 되었는지 확인)
-            const infoHeader = "## 📝 문제 정보";
-            if (pr.body && pr.body.includes(infoHeader)) {
-              console.log("이미 정보가 포함되어 있어 업데이트를 건너뜁니다.");
-              return;
+            // 5. PR 템플릿의 빈 칸 채우기 (정규표현식 치환)
+            // 템플릿에 있는 기본 문구들을 이슈에서 가져온 실제 데이터로 교체합니다.
+            let newBody = body
+              .replace(/- \*\*플랫폼\*\*:\s*.*$/m, `- **플랫폼**: ${platform}`)
+              .replace(/- \*\*문제 번호\*\*:\s*.*$/m, `- **문제 번호**: ${targetProbNum}`)
+              .replace(/- \*\*문제 이름\*\*:\s*.*$/m, `- **문제 이름**: ${probName}`)
+              .replace(/- \*\*문제 링크\*\*:\s*.*$/m, `- **문제 링크**: ${probLink}`)
+              .replace(/- \*\*난이도\*\*:\s*.*$/m, `- **난이도**: ${difficulty}`);
+
+            // 6. 변경사항이 있을 때만 업데이트
+            if (newBody !== body) {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                body: newBody
+              });
+              console.log("PR 본문이 성공적으로 업데이트되었습니다.");
             }
 
-            const newBody = `
-            ${infoHeader}
-            - **플랫폼**: ${platform}
-            - **문제 번호**: ${targetProbNum}
-            - **문제 이름**: ${probName}
-            - **문제 링크**: [바로가기](${probLink})
-            - **난이도**: ${difficulty}
-
-            ---
-            ${pr.body || "작성된 내용이 없습니다."}
-            `.replace(/^ +/gm, '');
-
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-              body: newBody
-            });
-
-            // 6. 라벨 자동 추가 (보너스)
+            // 7. 라벨 추가
             const labels = [];
             if (platform.includes("프로그래머스") || title.includes("PGS")) labels.push("프로그래머스");
             if (platform.includes("백준") || title.includes("BOJ")) labels.push("백준");
-            labels.push("weekly-challenge");
-
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              labels: labels
-            });
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: labels
+              });
+            }
